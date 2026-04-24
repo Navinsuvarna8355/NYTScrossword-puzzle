@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NYT Crossword Generator</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Georgia,serif;background:#1a1a2e;color:#fff;padding:20px;min-height:100vh}
+h1{text-align:center;color:#f5a623;margin-bottom:10px}
+.container{display:flex;gap:20px;justify-content:center;align-items:stretch}
+.sidebar{width:280px;flex-shrink:0}
+.main{display:flex;flex-direction:column;align-items:center;flex-grow:1}
+.card{background:#16213e;border:1px solid #0f3460;border-radius:10px;padding:10px;margin-bottom:10px}
+.card-title{font-size:13px;font-weight:bold;color:#f5a623;margin-bottom:6px}
+textarea{width:100%;background:#0d0d1a;border:1px solid #0f3460;border-radius:6px;color:#fff;font-size:11px;padding:6px;height:45px}
+.btn{width:100%;padding:8px;border:none;border-radius:6px;font-weight:bold;color:#fff;margin-bottom:5px;cursor:pointer}
+.btn-primary{background:#2c5aa0}
+.btn-success{background:#27ae60}
+.btn-warning{background:#e67e22}
+.btn-reset{background:#c0392b}
+#grid{display:grid;grid-template-columns:repeat(15,38px);gap:0;border:3px solid #f5a623}
+.cell{width:38px;height:38px;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid #444;background:#fff;color:#000;font-size:14px;font-weight:bold;position:relative}
+.cell.black{background:#1a1a2e;border-color:#1a1a2e}
+.cell .num{position:absolute;top:1px;left:2px;font-size:7px;color:#333}
+#status{background:#16213e;border:1px solid #0f3460;padding:10px;text-align:center;color:#f5a623;font-weight:600;border-radius:6px;margin-bottom:10px;min-height:40px;width:570px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stat{display:flex;justify-content:space-between;padding:4px}
+.stat-val{color:#f5a623;font-weight:bold}
+.clues{display:flex;gap:15px;width:100%;max-width:500px}
+.clue-col{flex:1;max-height:250px;overflow-y:auto;background:#16213e;padding:8px;border-radius:6px}
+.clue-title{font-weight:bold;color:#f5a623;margin-bottom:6px;font-size:11px}
+.clue-item{font-size:10px;margin-bottom:3px}
+.clue-num{color:#f5a623;font-weight:bold;margin-right:4px}
+.clue-word{color:#fff;font-weight:bold;margin-right:4px}
+.clue-text{color:#aaa;font-style:italic}
+</style>
+</head>
+<body>
+<h1>NEW YORK TIMES CROSSWORD</h1>
+<div class="container">
+<div class="sidebar">
+<div class="card"><div class="card-title">Theme Words</div>
+<textarea id="themeInput">SPACE NEPTUNE SATURN VENUS EARTH SOLAR LUNAR ASTRO ORBIT MUSIC MELODY HARMONY TEMPO TRUMPET CHORD SCALE VIOLA TIME MOMENTO MINUTE CHRONO FUTURE ANNUAL NATURE TIMER OCEAN DOLPHIN OCTOPUS MARLIN WAVES SHORE FOREST DESERT VALLEY MEADOW METEOR COMET PLUTO TIDE ABYSS SHARK ANCHOR MOMENT HOUR SWIFT CLOCK RIVER CANYON GLACIER CORAL RHYTHM BRASS CELLO BASS GUITAR JUPITER</textarea>
+<button class="btn btn-primary" onclick="setTheme()">Set Theme</button>
+</div>
+<div class="card"><button class="btn btn-primary" onclick="loadWordBank()">Load Words</button>
+<div id="bankStatus" style="font-size:9px;margin-top:4px;color:#38ef7d"></div>
+</div>
+<button class="btn btn-success" onclick="generatePuzzle()">Generate</button>
+<button class="btn btn-primary" onclick="generatePuzzle()">Try Again</button>
+<button class="btn btn-reset" onclick="resetGrid()">Reset</button>
+<div class="card" style="margin-top:10px">
+<div class="stat"><span>Words:</span><span class="stat-val" id="wordCount">0</span></div>
+<div class="stat"><span>Black:</span><span class="stat-val" id="blackCount">0</span></div>
+<div class="stat"><span>Fill:</span><span class="stat-val" id="fillPct">0%</span></div>
+</div>
+<button class="btn btn-warning" onclick="exportJSON()">Export JSON</button>
+</div>
+<div class="main">
+<div id="status">Ready</div>
+<div id="grid"></div>
+<div class="clues">
+<div class="clue-col"><div class="clue-title">Across</div><div id="across"></div></div>
+<div class="clue-col"><div class="clue-title">Down</div><div id="down"></div></div>
+</div>
+</div>
+</div>
+<script>
+var S = 15;
+var grid = [];
+var placed = [];
+var wordBank = {};
+var themeWords = [];
+var MAX_ATTEMPTS = 30;
+var FILL_TRIES = 800;
+
+function init() {
+  grid = [];
+  for(var r = 0; r < S; r++) {
+    grid[r] = [];
+    for(var c = 0; c < S; c++) grid[r][c] = null;
+  }
+  placed = [];
+  render();
+  updateStats();
+  document.getElementById('status').textContent = 'Ready';
+}
+
+function loadWordBank() {
+  document.getElementById('status').textContent = 'Loading...';
+  var b = 'THE,AND,FOR,ARE,BUT,NOT,YOU,ALL,CAN,ONE,OUT,SEE,TWO,USE,WAY,WHO,BOY,DAY,GET,RUN,SHE,TRY,NOW,OLD,NEW,MAN,WAR,WIN,TOP,BIG,CUT,EAT,ACT,AGE,AIR,ART,LAW,MAP,NET,OIL,PET,RED,SAY,SET,SUN,TIP,VAN,WET,YES,ZOO,ABLE,AWAY,BACK,BALL,BAND,BANK,BASE,BATH,BEAR,BEAT,BOOK,BOOT,BOX,CALL,CASE,CHAT,CLUB,COME,COOK,COOL,DARK,DEAL,DEEP,DRAW,DRUM,EARN,EAST,EDGE,EVEN,EVER,EYES,FACE,FACT,FAIL,FAIR,FALL,FARM,FAST,FATE,FEAR,FEET,FILE,FIND,FINE,FIRE,FISH,FIVE,FLAT,FOOD,FOOT,FORM,FORT,FOUR,FREE,FUND,GAME,GIVE,GLAD,GOES,GOOD,GRAD,GREEN,GROW,GUN,HAIR,HALF,HALL,HAND,HARD,HATE,HAVE,HEAD,HEAR,HEAT,HERE,HERO,HIDE,HIGH,HILL,HOLD,HOLE,HOLY,HOME,HOOK,HOPE,HORN,HORSE,HOST,HOUSE,IRON,JACK,JAIL,JET,JOB,JOKE,JUMP,JUST,KEEP,KICK,KILL,KIND,KING,KITE,KNEE,KNOW,LACK,LAKE,LAND,LAP,LAST,LATE,LEAD,LEAF,LEAN,LEARN,LEFT,LEG,LIFE,LIFT,LIKE,LINE,LIST,LIVE,LOAD,LOCK,LONG,LOOK,LORD,LOSE,LOUD,LOVE,LUCK,MADE,MAIN,MAKE,MANY,MARK,MEAL,MEAN,MEAT,MEET,MIND,MINE,MOON,MORE,MOST,MOVE,MUCH,MUST,NAME,NEAR,NEAT,NEED,NEWS,NEXT,NICE,NINE,NOSE,NOTE,OCEAN,ONCE,ONLY,OPEN,ORDER,OTHER,PACK,PAGE,PASS,PATH,PEACE,PEN,PILOT,PIN,PIPE,PLAN,PLAY,PLOT,PLUS,POOL,PORT,POST,POUND,POWER,PRICE,PRIDE,PRINT,PULL,PUMP,PUNCH,PURE,PUSH,RACE,RAISE,RATE,READ,REAL,REASON,RECORD,REST,RESULT,RETURN,REVIEW,RIGHT,RISE,RISK,RIVER,ROAD,ROCK,ROLE,ROLL,ROOM,ROOT,ROPE,ROUND,ROUTE,RUBBER,RULE,RURAL,SAFE,SAIL,SALE,SAME,SAVE,SCALE,SCENE,SCHOOL,SCORE,SEAT,SEEN,SELF,SEND,SEVEN,SHALL,SHAPE,SHARE,SHOW,SHUT,SICK,SIDE,SIGN,SINCE,SING,SISTER,SIT,SIZE,SKILL,SLOT,SLOW,SMALL,SMART,SMILE,SNOW,SOFT,SOIL,SOLD,SOLE,SOME,SONG,SOON,SORE,SORT,SOUL,SOUND,SOUTH,SPACE,SPARK,SPEAK,SPEED,SPELL,SPEND,SPLIT,SPOON,SPORT,SPOT,STAFF,STAGE,STAND,STAR,START,STAY,STICK,STILL,STOCK,STONE,STOP,STORE,STORY,STRANGE,STREAM,STREET,STRIKE,STRING,STRONG,STUCK,STUDENT,STUDY,STUFF,SUCCESS,SUCH,SUDDEN,SUGAR,SUIT,SUMMER,SUN,SUPER,SURE,SWEEP,SWIM,TABLE,TAIL,TAKE,TALK,TALL,TANK,TAPE,TASK,TASTE,TEAM,TEAR,TELL,TEMPO,TEN,TERM,TEST,THANK,THAT,THEIR,THEM,THEN,THERE,THESE,THING,THINK,THIRD,THREE,THROW,TIME,TINY,TOLD,TONE,TOOL,TOUR,TOWN,TRAP,TREE,TRIP,TRUE,TUBE,TURN,TWIN,TYPE,UNIT,UPON,URGE,USED,USER,VAIN,VALE,VASE,VEIL,VEIN,VENT,VERB,VERY,VIEW,VOTE,WAGE,WAIT,WAKE,WALK,WALL,WANT,WARD,WARM,WASH,WAVE,WEAR,WEED,WEEK,WEIGH,WEIRD,WELL,WENT,WERE,WEST,WHAT,WHEN,WHOM,WIDE,WIFE,WILD,WILL,WIND,WINE,WING,WIRE,WISE,WISH,WITH,WOLF,WOMAN,WOND,WONT,WOOD,WOOL,WORD,WORK,WORM,WORN,WRAP,YARD,YEAR,YELL,YOUR,ZEBR,ZONE,NEPTUNE,SATURN,MERCURY,VENUS,MARS,JUPITER,PLUTO,ORBIT,METEOR,MAGMA,RIVER,LAKE,DESERT,VALLEY,CANYON,GLACIER,MEADOW,FOREST,JUNGLE,PALM,CLOUD,FOGGY,SNOWY,RAINY,WINDY,CALM,BREEZY,CHILLY,WARM,BLAZE,EMBER,FLAME,SMOKE,STEAM,GLOW,RADIANT,SHIMMER,GLITTER,SPARKLE,GLOSSY,SHINY,BRIGHT,SMART,CLEVER,CUNNING,GENIUS,SHREWD,CRAFTY,TRICKY,WILY,FOXY,SLY,SLEEK,SLICK,SMOOTH,SILKY,VELVET,PLUSH,RICH,WEALTHY,BEAUTIFUL,PRETTY,HANDSOME,CHARMING,PLEASING,DELIGHTFUL,WONDERFUL,AMAZING,ASTONISHING,ASTOUNDING,FABULOUS,FANTASTIC,INCREDIBLE,EXTRAORDINARY,OUTSTANDING,EXCELLENT,SPLENDID,GLORIOUS,PEACEFUL,BLISSFUL,HAPPY,SAD,ANGRY,CALM,BOLD,BRAVE,DARING,AUDACIOUS,SHY,MODEST,HUMBLE,PROUD,GENTLE,ROUGH,HARD,SOFT,EASY,FAST,SLOW,QUICK,RAPID,SWIFT,TINY,HUGE,BIG,SMALL,LARGE,WIDE,NARROW,THIN,FAT,THICK,LEAN,ROUND,SQUARE,FLAT,HIGH,LOW,DEEP,SHALLOW,FULL,EMPTY,OPEN,CLOSED,FREE,LOCKED,BROKEN,FIXED,BENT,STRAIGHT,ALONE,LONELY,BLUE,RED,PINK,GREY,DARK,LIGHT,BLACK,WHITE,FAIR,BROWN,CLEAR,HAZY,MISTY,CLOUDY,RAINY,SUNNY,WINDY,HOT,COLD,WARM,COOL,WET,DRY,MESSY,CLEAN,TIDY,NEAT,FINE,COARSE,BOLD,FAINT,WEAK,STRONG,MIGHTY,POWERFUL,ABLE,CAPABLE,SKILLED,TALENTED,GIFTED,SHARP,DULL,BLUNT,QUIET,NOISY,HUSH,LOUD,SILENT,MUTE,DEAF,SIMPLE,COMPLEX,PLAIN,FANCY,ELEGANT,RICH,POOR,MIDDLE,UPPER,LOWER,HIGHER,BETTER,WORSE,BEST,WORST,FIRST,LAST,NEXT,SOON,LATER,YESTERDAY,TODAY,TOMORROW,DAILY,WEEKLY,MONTHLY,YEARLY,ONCE,TWICE,OFTEN,RARELY,NEVER,ALWAYS,USUALLY,GENERALLY,CERTAINLY,SURELY,MAYBE,POSSIBLY,PROBABLY,DEFINITELY,ACTUALLY,REALLY,TRULY,ESPECIALLY,PARTICULARLY,REGULARLY,FREQUENTLY,OCCASIONALLY,SELDOM,HARDLY,SCARCELY,BARELY,JUST,ONLY,EVEN,STILL,YET,ALREADY,BEFORE,AFTER,YEAR,TIME,MORE,LESS,MOST,FEW,RATHER,QUITE,PRETTY,BIGGER,SMALLER,LARGER,TINIER,HIGHER,LOWER,DEEPER,FARTHER,NEARER,CLOSER,LONGER,SHORTER,TALLER,OLDER,YOUNGER,WARMER,COLDER,COOLER,FASTEST,SLOWEST,HARDEST,EASIEST,BEST,BEST,BETTER,PETTER,PETTER,WILL,WILL,MUST,MUST,COULD,COULD,SHOULD,SHOULD,MAY,MAY,MIGHT,MIGHT,SHALL,SHALL,WANT,WANT,NEED,NEED,WISH,WISH,HOPE,HOPE,FEAR,FEAR,LOVE,LOVE,LIKE,LIKE,AGREE,AGREE,UNDERSTAND,UNDERSTAND,REMEMBER,REMEMBER,FORGET,FORGET,THINK,THINK,BELIEVE,BELIEVE,KNOW,KNOW,COME,COME,GO,GO,STOP,STOP,START,START,CONTINUE,CONTINUE,WAIT,WAIT,HURRY,HURRY,LOOK,LOOK,WATCH,WATCH,LISTEN,LISTEN,HEAR,HEAR,FEEL,FEEL,TOUCH,TOUCH,TASTE,TASTE,SMELL,SMELL,SEE,SEE,OBSERVE,OBSERVE,NOTICE,NOTICE,RECOGNIZE,RECOGNIZE,NAME,NAME,CALL,CALL,DESCRIBE,DESCRIBE,EXPLAIN,EXPLAIN,DISCUSS,DISCUSS,TALK,TALK,SPEAK,SPEAK,SAY,SAY,TELL,TELL,ASK,ASK,ANSWER,ANSWER,CREATE,CREATE,INVENT,INVENT,DESIGN,DESIGN,BUILD,BUILD,MAKE,MAKE,PRODUCE,PRODUCE,DEVELOP,DEVELOP,IMPROVE,IMPROVE,ENHANCE,ENHANCE,REPAIR,REPAIR,FIX,FIX,RESTORE,RESTORE,CHANGE,CHANGE,TRANSFORM,TRANSFORM,CONVERT,CONVERT,MODIFY,MODIFY,ADJUST,ADJUST,ADAPT,ADAPT,REVISE,REVISE,EDIT,EDIT,UPDATE,UPDATE,WRITE,WRITE,COMPOSE,COMPOSE,DRAFT,DRAFT,SKETCH,SKETCH,DRAW,DRAW,PAINT,PAINT,COLOR,COLOR,CLEAN,CLEAN,WASH,WASH,SCRUB,SCRUB,WIPE,WIPE,DUST,DUST,SWEEP,SWEEP,VACUUM,VACUUM,MOP,MOP,DRY,DRY,WET,WET,SOAK,SOAK,PRESS,PRESS,SQUASH,SQUASH,CRUSH,CRUSH,BREAK,BREAK,SPLIT,SPLIT,CUT,CUT,SLICE,SLICE,CHOP,CHOP,PEEL,PEEL,TEAR,TEAR,SNAP,SNAP,CRACK,CRACK,BEND,BEND,FOLD,FOLD,ROLL,ROLL,WRAP,WRAP,TIE,TIE,KNOT,KNOT,LOOP,LOOP,HOOK,HOOK,LOCK,LOCK,CLIP,CLIP,PIN,PIN,NAIL,NAIL,SCREW,SCREW,BOLT,BOULT,WELD,WELD,GLUE,GLUE,TAPE,TAPE,STITCH,STITCH,SEW,SEW,KNIT,KNIT,WEAVE,WEAVE,BRAID,BRAID';
+  var words = b.split(',').filter(function(w){return w.length >= 3 && w.length <= 15 && isValidWord(w)});
+  for(var i=0;i<words.length;i++) {
+    var w = words[i];
+    if(!wordBank[w.length]) wordBank[w.length] = [];
+    wordBank[w.length].push(w);
+  }
+  document.getElementById('bankStatus').textContent = words.length + ' words';
+  document.getElementById('status').textContent = 'Ready - click Generate';
+}
+
+function setTheme() {
+  var raw = document.getElementById('themeInput').value || '';
+  var words = raw.split(/[,\n\s]+/).map(function(w){ return w.trim().toUpperCase().replace(/[^A-Z]/g,'') }).filter(function(w){ return w.length >= 4; });
+  var seen = {};
+  themeWords = words.filter(function(w){
+    if(seen[w]) return false;
+    seen[w] = true;
+    return true;
+  });
+  if(!themeWords.length){
+    document.getElementById('status').textContent = 'Theme: none - check input';
+    return;
+  }
+  document.getElementById('status').textContent = themeWords.length + ' theme words set';
+}
+
+function isValidWord(w) {
+  if(w.length < 3) return false;
+  if(!/[AEIOU]/.test(w)) return false;
+  if(/Q[^U]/.test(w)) return false;
+  return true;
+}
+
+function canPlace(word, r, c, dir) {
+  if(dir === 'H') { if(c + word.length >= S) return false; } 
+  else { if(r + word.length >= S) return false; }
+  
+  // Check already word at same start position with different word
+  for(var i = 0; i < placed.length; i++) {
+    if(placed[i].r === r && placed[i].c === c && placed[i].dir === dir && placed[i].word !== word) return false;
+  }
+  
+  // Check boundaries - need black square or grid edge at start
+  if(dir === 'H') {
+    if(c > 0 && grid[r][c-1] !== null && grid[r][c-1] !== '#') return false;
+  } else {
+    if(r > 0 && grid[r-1][c] !== null && grid[r-1][c] !== '#') return false;
+  }
+  
+  // Prevent placing where word already exists (non-intersecting)
+  if(dir === 'H') {
+    if(grid[r][c] && grid[r][c] !== '#') return false;
+  } else {
+    if(grid[r][c] && grid[r][c] !== '#') return false;
+  }
+  
+  for(var i = 0; i < word.length; i++) {
+    var rr = dir === 'H' ? r : r + i;
+    var cc = dir === 'H' ? c + i : c;
+    if(grid[rr][cc] === '#') return false;
+    if(grid[rr][cc] && grid[rr][cc] !== word.charAt(i)) return false;
+  }
+  
+  // End boundary
+  if(dir === 'H') {
+    var endC = c + word.length;
+    if(endC < S && grid[r][endC] !== null && grid[r][endC] !== '#') return false;
+  } else {
+    var endR = r + word.length;
+    if(endR < S && grid[endR][c] !== null && grid[endR][c] !== '#') return false;
+  }
+  
+  return true;
+}
+
+function countIntersections(word, r, c, dir) {
+  if(dir === 'H') { if(c + word.length >= S) return 0; }
+  else { if(r + word.length >= S) return 0; }
+  var n = 0;
+  for(var i = 0; i < word.length; i++) {
+    var rr = dir === 'H' ? r : r + i;
+    var cc = dir === 'H' ? c + i : c;
+    if(rr < 0 || rr >= S || cc < 0 || cc >= S) return 0;
+    if(grid[rr][cc] === word.charAt(i)) n++;
+  }
+  return n;
+}
+
+function findBestPosition(word) {
+  var positions = [];
+  for(var r = 0; r < S; r++) {
+    for(var c = 0; c < S; c++) {
+      if(c + word.length <= S - 1 && canPlace(word, r, c, 'H')) {
+        var ints = countIntersections(word, r, c, 'H');
+        positions.push({r:r, c:c, dir:'H', score:ints});
+      }
+    }
+  }
+  for(var r = 0; r < S; r++) {
+    for(var c = 0; c < S; c++) {
+      if(r + word.length <= S - 1 && canPlace(word, r, c, 'V')) {
+        var ints = countIntersections(word, r, c, 'V');
+        positions.push({r:r, c:c, dir:'V', score:ints});
+      }
+    }
+  }
+  if(positions.length === 0) return null;
+  // Prefer direction with intersections, or random if none
+  var maxScore = Math.max.apply(null, positions.map(function(p){return p.score}));
+  var candidates = positions.filter(function(p){return p.score === maxScore});
+  if(candidates.length === 0) candidates = positions;
+  var pick = candidates[Math.floor(Math.random() * candidates.length)];
+  return {r:pick.r, c:pick.c, dir:pick.dir};
+}
+
+function placeWord(word, r, c, dir) {
+  if(word.length < 4 || word.length > 13) return false;
+  if(dir === 'H' && c + word.length >= S) return false;
+  if(dir === 'V' && r + word.length >= S) return false;
+  
+  // Check boundaries - need black square or grid edge at start
+  if(dir === 'H') {
+    if(c > 0 && grid[r][c-1] !== null && grid[r][c-1] !== '#') return false;
+  } else {
+    if(r > 0 && grid[r-1][c] !== null && grid[r-1][c] !== '#') return false;
+  }
+  
+  // Check if cells already occupied - if yes, must match
+  for(var i = 0; i < word.length; i++) {
+    var rr = dir === 'H' ? r : r + i;
+    var cc = dir === 'H' ? c + i : c;
+    if(rr < 0 || rr >= S || cc < 0 || cc >= S) continue;
+    if(grid[rr][cc] === '#') return false;
+    if(grid[rr][cc] && grid[rr][cc] !== word.charAt(i)) return false;
+  }
+  
+  // Place the word
+  for(var i = 0; i < word.length; i++) {
+    var rr = dir === 'H' ? r : r + i;
+    var cc = dir === 'H' ? c + i : c;
+    grid[rr][cc] = word.charAt(i);
+  }
+  placed.push({word: word, r: r, c: c, dir: dir});
+  
+  // Add black at word END to prevent merging
+  if(dir === 'H') {
+    var endC = c + word.length;
+    if(endC < S && grid[r][endC] === null) grid[r][endC] = '#';
+  } else {
+    var endR = r + word.length;
+    if(endR < S && grid[endR][c] === null) grid[endR][c] = '#';
+  }
+  
+  // Every 2 words, add black squares for symmetry
+  if(placed.length % 2 === 0) {
+    addEveryTwoBlacks();
+  }
+  return true;
+}
+
+function addEveryTwoBlacks() {
+  // Add black squares at word ends for both across AND down - symmetrically ONLY at ends
+  for(var i = 0; i < placed.length; i++) {
+    var w = placed[i];
+    var r = w.r, c = w.c, len = w.word.length;
+    
+    if(w.dir === 'H') {
+      var endC = c + len;
+      if(endC < S) {
+        grid[r][endC] = '#';
+        grid[S-1-r][S-1-endC] = '#';
+      }
+    } else {
+      var endR = r + len;
+      if(endR < S) {
+        grid[endR][c] = '#';
+        grid[S-1-endR][S-1-c] = '#';
+      }
+    }
+  }
+}
+
+function addDifficultBlacks() {
+  for(var r = 0; r < S; r++) {
+    for(var c = 0; c < S; c++) {
+      if(grid[r][c] && /[FQXZJKV]/.test(grid[r][c])) {
+        var neighbors = [[r-1,c],[r+1,c],[r,c-1],[r,c+1],[r-1,c-1],[r-1,c+1],[r+1,c-1],[r+1,c+1]];
+        for(var i=0;i<neighbors.length;i++) {
+          var nr = neighbors[i][0], nc = neighbors[i][1];
+          if(nr >= 0 && nr < S && nc >= 0 && nc < S && grid[nr][nc] === null) {
+            grid[nr][nc] = '#';
+            grid[S-1-nr][S-1-nc] = '#';
+          }
+        }
+      }
+    }
+  }
+}
+
+function addSymmetryToGrid() {
+  // First, collect all existing letters
+  var existing = [];
+  for(var r = 0; r < S; r++) {
+    for(var c = 0; c < S; c++) {
+      if(grid[r][c] && grid[r][c] !== '#') {
+        existing.push({r:r, c:c, ch:grid[r][c]});
+      }
+    }
+  }
+  
+  // Mirror letters to achieve 180° rotational symmetry  
+  for(var r = 0; r < S/2; r++) {
+    for(var c = 0; c < S; c++) {
+      var mr = S - 1 - r;
+      var mc = S - 1 - c;
+      var ch = grid[r][c];
+      var mch = grid[mr][mc];
+      if(ch === '#') {
+        grid[mr][mc] = '#';
+      } else if(mch === '#') {
+        grid[r][c] = '#';
+      } else if(ch && !mch) {
+        grid[mr][mc] = ch;
+      } else if(!ch && mch) {
+        grid[r][c] = mch;
+      } else if(!ch && !mch) {
+        // Both null - make both black for symmetry
+        grid[r][c] = '#';
+        grid[mr][mc] = '#';
+      }
+    }
+  }
+  
+  // Force proper black squares at word ends - ONLY if no letter conflict
+  for(var i = 0; i < placed.length; i++) {
+    var w = placed[i];
+    var r = w.r, c = w.c, len = w.word.length;
+    if(w.dir === 'H') {
+      var endC = c + len;
+      if(endC < S && grid[r][endC] === null) grid[r][endC] = '#';
+    } else {
+      var endR = r + len;
+      if(endR < S && grid[endR][c] === null) grid[endR][c] = '#';
+    }
+  }
+  
+  // Filter short words (3+ only)  
+  var filteredPlaced = [];
+  for(var i = 0; i < placed.length; i++) {
+    if(placed[i].word.length >= 3) {
+      filteredPlaced.push(placed[i]);
+    }
+  }
+  placed = filteredPlaced;
+}
+
+function generatePuzzle() {
+  if(themeWords.length < 2) setTheme();
+  if(themeWords.length < 2) {
+    document.getElementById('status').textContent = 'Set 2+ words!';
+    return;
+  }
+  document.getElementById('status').textContent = 'Generating...';
+  var bestGrid = null, bestScore = 0;
+  
+  for(var attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    for(var r = 0; r < S; r++) for(var c = 0; c < S; c++) grid[r][c] = null;
+    placed = [];
+    
+    var sortedThemes = themeWords.slice().sort(function(a,b){ 
+    var alen = a.length, blen = b.length;
+    if(alen < 4 && blen >= 4) return 1;
+    if(blen < 4 && alen >= 4) return -1;
+    return b.length - a.length; 
+  });
+    var firstWord = sortedThemes[0];
+    var r, c, dir;
+    
+    var randRow = Math.floor(Math.random() * (S - 2));
+    var randCol = Math.floor(Math.random() * (S - firstWord.length));
+    if(Math.random() > 0.5) {
+      dir = 'H';
+      r = randRow;
+      c = randCol;
+    } else {
+      dir = 'V';
+      r = randCol;
+      c = randRow;
+    }
+    if(!canPlace(firstWord, r, c, dir)) {
+      r = 7; c = 0; dir = 'H';
+    }
+    placeWord(firstWord, r, c, dir);
+    addDifficultBlacks();
+    
+    for(var i = 1; i < sortedThemes.length; i++) {
+      var pos = findBestPosition(sortedThemes[i]);
+      if(pos) {
+        var alreadyAtPos = false;
+        for(var j=0; j<placed.length; j++) {
+          if(placed[j].r === pos.r && placed[j].c === pos.c && placed[j].dir === pos.dir) alreadyAtPos = true;
+        }
+        if(!alreadyAtPos) {
+          placeWord(sortedThemes[i], pos.r, pos.c, pos.dir);
+          addDifficultBlacks();
+        }
+      }
+    }
+    
+    var fillTries = 0;
+    while(fillTries < 800) {
+      var newPlaced = tryFillFromDictionary();
+      if(!newPlaced) break;
+      fillTries++;
+    }
+    
+var seen = {};
+  var uniqueWords = placed.filter(function(p){
+    var key = p.word + '_' + p.r + '_' + p.c + '_' + p.dir;
+    if(seen[key]) return false;
+    seen[key] = true;
+    return p.word.length >= 3;
+  });
+    
+    for(var r = 0; r < S; r++) for(var c = 0; c < S; c++) grid[r][c] = null;
+    for(var j=0;j<uniqueWords.length;j++) {
+      var p = uniqueWords[j];
+      for(var i = 0; i < p.word.length; i++) {
+        var rr = p.dir === 'H' ? p.r : p.r + i;
+        var cc = p.dir === 'H' ? p.c + i : p.c;
+        grid[rr][cc] = p.word.charAt(i);
+      }
+    }
+    addDifficultBlacks();
+    
+    var score = uniqueWords.length * 15 + getFillPercent();
+    if(score > bestScore) {
+      bestScore = score;
+      bestGrid = JSON.parse(JSON.stringify(grid));
+      placed = uniqueWords.slice();
+    }
+  }
+  
+  if(bestGrid) {
+    for(var r = 0; r < S; r++) for(var c = 0; c < S; c++) grid[r][c] = bestGrid[r][c];
+  }
+  
+  // 180° ROTATIONAL SYMMETRY - mirror all words to opposite side
+  addSymmetryToGrid();
+  
+  // Add black squares around difficult letters after mirroring
+  addDifficultBlacks();
+  
+  render();
+  updateStats();
+  document.getElementById('status').textContent = placed.length + ' words placed';
+}
+
+function tryFillFromDictionary() {
+  var bestNew = null, bestIntersections = 0;
+  for(var len = 5; len <= 13; len++) {
+    if(!wordBank[len] || wordBank[len].length === 0) continue;
+    var candidates = wordBank[len].slice(0, 300);
+    for(var i = 0; i < candidates.length; i++) {
+      var w = candidates[i];
+      if(alreadyPlaced(w)) continue;
+      var pos = findBestPosition(w);
+      if(!pos) continue;
+      var intersects = countIntersections(w, pos.r, pos.c, pos.dir);
+      if(intersects > bestIntersections) {
+        bestIntersections = intersects;
+        bestNew = {word: w, r: pos.r, c: pos.c, dir: pos.dir};
+      }
+    }
+  }
+  if(bestNew && bestIntersections > 0) {
+    placeWord(bestNew.word, bestNew.r, bestNew.c, bestNew.dir);
+    addDifficultBlacks();
+    return bestNew;
+  }
+  return null;
+}
+
+function alreadyPlaced(w) {
+  for(var i = 0; i < placed.length; i++) {
+    if(placed[i].word === w) return true;
+  }
+  return false;
+}
+
+function resetGrid() {
+  init();
+}
+
+function getFillPercent() {
+  var filled = 0, total = 0;
+  for(var r = 0; r < S; r++) {
+    for(var c = 0; c < S; c++) {
+      if(grid[r][c] === '#') continue;
+      total++;
+      if(typeof grid[r][c] === 'string' && grid[r][c].length === 1) filled++;
+    }
+  }
+  if(total === 0) return 0;
+  return Math.round(filled / total * 100);
+}
+
+function render() {
+  var g = document.getElementById('grid');
+  g.innerHTML = '';
+  var nums = {};
+  var k = 1;
+  for(var r = 0; r < S; r++) {
+    for(var c = 0; c < S; c++) {
+      if(grid[r][c] && grid[r][c] !== '#') {
+        var isWordStart = false;
+        var left = c > 0 ? grid[r][c-1] : '#';
+        var above = r > 0 ? grid[r-1][c] : '#';
+        if(left === '#' || left === null || above === '#' || above === null) {
+          isWordStart = true;
+        }
+        if(c === 0 || r === 0 || left === '#' || above === '#') {
+          nums[r + ',' + c] = k++;
+        }
+      }
+    }
+  }
+  for(var r = 0; r < S; r++) {
+    for(var c = 0; c < S; c++) {
+      var d = document.createElement('div');
+      if(grid[r][c] === '#') {
+        d.className = 'cell black';
+      } else {
+        d.className = 'cell';
+        if(nums[r + ',' + c]) {
+          var s = document.createElement('span');
+          s.className = 'num';
+          s.textContent = nums[r + ',' + c];
+          d.appendChild(s);
+        }
+        if(grid[r][c]) {
+          var l = document.createElement('span');
+          l.textContent = grid[r][c];
+          d.appendChild(l);
+        }
+      }
+      g.appendChild(d);
+    }
+  }
+  showClues(nums);
+}
+
+function showClues(nums) {
+  var seen = {};
+  var across = [], down = [];
+  for(var i=0;i<placed.length;i++) {
+    var w = placed[i];
+    var key = w.word + '_' + w.r + '_' + w.c + '_' + w.dir;
+    if(seen[key]) continue;
+    seen[key] = true;
+    var clue = getClue(w.word);
+    var num = nums[w.r + ',' + w.c];
+    if(w.dir === 'H') across.push({num:num, word:w.word, clue:clue});
+    else down.push({num:num, word:w.word, clue:clue});
+  }
+  across.sort(function(a,b){return (a.num === '?'?-1:a.num) - (b.num === '?'?-1:b.num)});
+  down.sort(function(a,b){return (a.num === '?'?-1:a.num) - (b.num === '?'?-1:b.num)});
+  document.getElementById('across').innerHTML = across.map(function(a){return '<div class="clue-item"><span class="clue-num">'+a.num+'.</span><span class="clue-word">'+a.word+'</span><span class="clue-text">'+a.clue+'</span></div>'}).join('');
+  document.getElementById('down').innerHTML = down.map(function(d){return '<div class="clue-item"><span class="clue-num">'+d.num+'.</span><span class="clue-word">'+d.word+'</span><span class="clue-text">'+d.clue+'</span></div>'}).join('');
+}
+
+function getClue(w) {
+  var clues = {NEPTUNE:'Planet',HARMONY:'Music',TRUMPET:'Brass',MOMENTO:'Italian',SATURN:'Ringed',MELODY:'Tune',MINUTE:'Small',CHRONO:'Time',FUTURE:'Coming',ANNUAL:'Yearly',MARLIN:'Fish',NATURE:'World',FOREST:'Trees',DESERT:'Dry',VALLEY:'Low',MEADOW:'Grass',METEOR:'Star',RHYTHM:'Beat',VENUS:'Goddess',EARTH:'Planet',SOLAR:'Sun',LUNAR:'Moon',ORBIT:'Path',MUSIC:'Sound',SCALE:'Balance',DOLPHIN:'Smart',OCTOPUS:'Legs',JUPITER:'Largest',GLACIER:'Ice',SPACE:'Area',RIVER:'Stream',HORN:'Trumpet',TOP:'Highest',PET:'Animal',REST:'Relax',FOR:'Against',ART:'Paint',NEW:'Fresh',NEWS:'Papers',TEN:'10',LINE:'Row',THREE:'3',HOUR:'Time',BASS:'Fish',LOUD:'Noisy',ALL:'Every',CAN:'Able',ARE:'Is',ONE:'1',RED:'Color',CAN:'Can'};
+  return clues[w] || w;
+}
+
+function updateStats() {
+  var b = 0;
+  for(var r = 0; r < S; r++) for(var c = 0; c < S; c++) if(grid[r][c] === '#') b++;
+  document.getElementById('wordCount').textContent = placed.length;
+  document.getElementById('blackCount').textContent = b;
+  document.getElementById('fillPct').textContent = getFillPercent() + '%';
+}
+
+function exportJSON() {
+  var data = {grid:grid, words:placed, fillPercent:getFillPercent(), symmetric:true};
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+  a.download = 'crossword.json';
+  a.click();
+}
+
+init();
+</script>
+</body>
+</html>
